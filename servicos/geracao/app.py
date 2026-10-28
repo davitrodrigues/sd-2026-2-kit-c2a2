@@ -8,7 +8,7 @@ Rodar: uvicorn servicos.geracao.app:app --port 8003
 import os
 
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from servicos.comum.circuit_breaker import CircuitBreaker, CircuitoAberto
@@ -31,9 +31,13 @@ def perguntar(p: Pergunta):
     r.raise_for_status()
     contexto = [t["texto"] for t in r.json()["resultados"]]
 
-    # TAREFA 3: envolva a chamada gerar(...) com disjuntor.chamar(...)
-    # e trate CircuitoAberto devolvendo 503 com mensagem clara.
-    resposta = gerar(p.pergunta, contexto)
+    try:
+        resposta = disjuntor.chamar(gerar, p.pergunta, contexto)
+    except CircuitoAberto as e:
+        raise HTTPException(
+            status_code=503,
+            detail="servico de geracao temporariamente indisponivel: circuito aberto",
+        ) from e
 
     return {"pergunta": p.pergunta, "resposta": resposta, "contexto": contexto}
 

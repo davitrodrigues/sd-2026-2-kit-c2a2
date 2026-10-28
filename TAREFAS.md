@@ -8,7 +8,7 @@
 - [X] **2. Busca por similaridade** - `servicos/recuperacao/app.py`
       Vetorizar a pergunta, comparar com cada documento e devolver os top_k. (Aula 9/10)
 
-- [ ] **3. Circuit breaker no LLM** - `servicos/geracao/app.py`
+- [X] **3. Circuit breaker no LLM** - `servicos/geracao/app.py`
       Envolver a chamada `gerar(...)` com `disjuntor.chamar(...)` e devolver 503
       quando o circuito estiver aberto. (Aula 11)
 
