@@ -5,17 +5,20 @@ TAREFA 3: proteger a chamada ao LLM com o circuit breaker.
 
 Rodar: uvicorn servicos.geracao.app:app --port 8003
 """
-import os
-
-import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from servicos.comum.circuit_breaker import CircuitBreaker, CircuitoAberto
+from servicos.comum.fila import (
+    ErroFila,
+    FilaIndisponivel,
+    FilaTimeout,
+    FalhaNaRecuperacao,
+    solicitar_busca,
+)
 from servicos.comum.llm import gerar
 
 app = FastAPI(title="Geracao - C2.A2")
-URL_RECUPERACAO = os.getenv("URL_RECUPERACAO", "http://localhost:8002")
 
 disjuntor = CircuitBreaker(limite_falhas=3, espera_segundos=20)
 
@@ -26,10 +29,17 @@ class Pergunta(BaseModel):
 
 @app.post("/perguntar")
 def perguntar(p: Pergunta):
-    r = requests.post(f"{URL_RECUPERACAO}/buscar",
-                      json={"pergunta": p.pergunta, "top_k": 3}, timeout=10)
-    r.raise_for_status()
-    contexto = [t["texto"] for t in r.json()["resultados"]]
+    try:
+        resultados = solicitar_busca(p.pergunta)
+    except FilaIndisponivel as e:
+        raise HTTPException(503, "fila de recuperacao indisponivel") from e
+    except FilaTimeout as e:
+        raise HTTPException(
+            503, "tempo esgotado aguardando a recuperacao") from e
+    except (FalhaNaRecuperacao, ErroFila) as e:
+        raise HTTPException(502, str(e)) from e
+
+    contexto = [t["texto"] for t in resultados]
 
     try:
         resposta = disjuntor.chamar(gerar, p.pergunta, contexto)

@@ -1,7 +1,83 @@
 services:
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  # TAREFA 4: acrescente aqui os tres servicos (ingestao, recuperacao, geracao)
-  # depois de escrever um Dockerfile para cada um.
+  ingestao:
+    build: .
+    command: ["uvicorn", "servicos.ingestao.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      DIR_DADOS: /dados
+    volumes:
+      - indice-dados:/dados
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/saude', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  recuperacao:
+    build: .
+    command: ["uvicorn", "servicos.recuperacao.app:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      URL_INGESTAO: http://ingestao:8001
+    depends_on:
+      ingestao:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/saude', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  geracao:
+    build: .
+    command: ["uvicorn", "servicos.geracao.app:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      FILA_TIMEOUT_SEGUNDOS: ${FILA_TIMEOUT_SEGUNDOS:-30}
+      URL_RECUPERACAO: http://recuperacao:8002
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_URL: ${LLM_API_URL:-https://api.openai.com/v1/chat/completions}
+      LLM_MODELO: ${LLM_MODELO:-gpt-4o-mini}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-20}
+    depends_on:
+      redis:
+        condition: service_healthy
+      recuperacao:
+        condition: service_healthy
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/saude', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    build: .
+    command: ["python", "-m", "servicos.worker.app"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      URL_RECUPERACAO: http://recuperacao:8002
+    depends_on:
+      redis:
+        condition: service_healthy
+      recuperacao:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  indice-dados:

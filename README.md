@@ -43,10 +43,8 @@ pip install -r requirements.txt
 # 4. Copie o arquivo de ambiente (funciona offline sem chave de LLM)
 cp .env.example .env
 
-# 5. Suba os três serviços, cada um em um terminal
-uvicorn servicos.ingestao.app:app     --port 8001
-uvicorn servicos.recuperacao.app:app  --port 8002
-uvicorn servicos.geracao.app:app      --port 8003
+# 5. Suba os servicos, Redis e o worker
+docker compose up --build
 
 # 6. Indexe os documentos de teste
 curl -X POST http://localhost:8001/indexar -H "Content-Type: application/json" \
@@ -55,7 +53,13 @@ curl -X POST http://localhost:8001/indexar -H "Content-Type: application/json" \
 # 7. Pergunte (funciona depois da TAREFA 2)
 curl -X POST http://localhost:8003/perguntar -H "Content-Type: application/json" \
   -d '{"pergunta":"o que diz o teorema CAP?"}'
+
+# Para encerrar os servicos
+docker compose down
 ```
+
+O endpoint de geracao publica a busca na fila Redis; o worker consome a tarefa,
+consulta o servico de recuperacao e devolve os resultados para a mesma requisicao.
 
 ---
 
@@ -70,9 +74,11 @@ sd-2026-2-kit-c2a2/
 │   │   └── circuit_breaker.py  # PRONTO - modelo de referência
 │   ├── ingestao/app.py         # TAREFA 1
 │   ├── recuperacao/app.py      # TAREFA 2
-│   └── geracao/app.py          # TAREFA 3
+│   ├── geracao/app.py          # TAREFA 3
+│   └── worker/app.py           # TAREFA 4 - busca pela fila Redis
+├── Dockerfile                  # imagem compartilhada pelos serviços e worker
 ├── documentos/                 # base de teste para indexar
-├── docker-compose.yml          # TAREFA 4
+├── docker-compose.yml          # serviços, Redis e worker
 └── TAREFAS.md                  # <- comece por aqui
 ```
 
