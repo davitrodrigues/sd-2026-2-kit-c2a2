@@ -5,7 +5,7 @@
 - [X] **1. Persistir o indice** - `servicos/ingestao/app.py`
       O indice hoje some ao reiniciar. Guarde em arquivo ou banco vetorial.
 
-- [ ] **2. Busca por similaridade** - `servicos/recuperacao/app.py`
+- [X] **2. Busca por similaridade** - `servicos/recuperacao/app.py`
       Vetorizar a pergunta, comparar com cada documento e devolver os top_k. (Aula 9/10)
 
 - [ ] **3. Circuit breaker no LLM** - `servicos/geracao/app.py`
