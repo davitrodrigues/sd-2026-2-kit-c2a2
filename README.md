@@ -44,22 +44,73 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # 5. Suba os servicos, Redis e o worker
-docker compose up --build
+docker compose up --build -d
 
-# 6. Indexe os documentos de teste
-curl -X POST http://localhost:8001/indexar -H "Content-Type: application/json" \
-  -d '[{"texto":"O teorema CAP trata de consistencia e disponibilidade.","origem":"aula11"}]'
+# 6. Indexe todos os arquivos .txt de documentos/
+python - <<'PY'
+import json
+from pathlib import Path
+from urllib.request import Request, urlopen
 
-# 7. Pergunte (funciona depois da TAREFA 2)
+documentos = [
+    {"texto": arquivo.read_text(encoding="utf-8"), "origem": str(arquivo)}
+    for arquivo in sorted(Path("documentos").glob("*.txt"))
+]
+if not documentos:
+    raise SystemExit("Nenhum arquivo .txt encontrado em documentos/")
+
+requisicao = Request(
+    "http://localhost:8001/indexar",
+    data=json.dumps(documentos, ensure_ascii=False).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+with urlopen(requisicao, timeout=30) as resposta:
+    print(resposta.read().decode("utf-8"))
+PY
+
+# 7. Pergunte; a resposta inclui os trechos usados como contexto
 curl -X POST http://localhost:8003/perguntar -H "Content-Type: application/json" \
-  -d '{"pergunta":"o que diz o teorema CAP?"}'
+  -d '{"pergunta":"O que o teorema CAP diz sobre particao de rede?"}'
 
 # Para encerrar os servicos
 docker compose down
 ```
 
-O endpoint de geracao publica a busca na fila Redis; o worker consome a tarefa,
-consulta o servico de recuperacao e devolve os resultados para a mesma requisicao.
+Sem `LLM_API_KEY`, a geracao usa o modo simulado offline. Com uma chave configurada
+no ambiente, chama o LLM externo usando somente os trechos recuperados como contexto.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    Cliente[Cliente]
+    Ingestao[Servico de ingestao]
+    Volume[(Indice persistido)]
+    Recuperacao[Servico de recuperacao]
+    Geracao[Servico de geracao]
+    Redis[(Redis: fila de busca)]
+    Worker[Worker]
+    LLM[LLM ou modo simulado]
+
+    Cliente -->|POST /indexar| Ingestao
+    Ingestao -->|salva documentos e vetores| Volume
+    Recuperacao -->|GET /indice| Ingestao
+    Cliente -->|POST /perguntar| Geracao
+    Geracao -->|publica busca| Redis
+    Redis -->|entrega tarefa| Worker
+    Worker -->|POST /buscar| Recuperacao
+    Recuperacao -->|top_k trechos similares| Worker
+    Worker -->|resultados na fila de resposta| Redis
+    Redis -->|contexto recuperado| Geracao
+    Geracao -->|pergunta + contexto| LLM
+    LLM --> Geracao
+    Geracao -->|resposta + contexto| Cliente
+```
+
+O endpoint `/perguntar` espera a resposta correlacionada da fila Redis. Se Redis
+estiver indisponivel ou o worker nao responder no prazo, a API retorna `503` em vez
+de gerar uma resposta sem os documentos recuperados.
 
 ---
 
@@ -69,13 +120,14 @@ consulta o servico de recuperacao e devolve os resultados para a mesma requisica
 sd-2026-2-kit-c2a2/
 ├── servicos/
 │   ├── comum/
-│   │   ├── embeddings.py       # PRONTO - vetorização offline
-│   │   ├── llm.py              # PRONTO - com modo simulado
-│   │   └── circuit_breaker.py  # PRONTO - modelo de referência
-│   ├── ingestao/app.py         # TAREFA 1
-│   ├── recuperacao/app.py      # TAREFA 2
-│   ├── geracao/app.py          # TAREFA 3
-│   └── worker/app.py           # TAREFA 4 - busca pela fila Redis
+│   │   ├── embeddings.py       # vetorizacao offline
+│   │   ├── fila.py             # comunicacao via Redis
+│   │   ├── llm.py              # LLM real ou modo simulado
+│   │   └── circuit_breaker.py  # protecao da geracao
+│   ├── ingestao/app.py         # indice persistente
+│   ├── recuperacao/app.py      # busca por similaridade
+│   ├── geracao/app.py          # orquestracao de /perguntar
+│   └── worker/app.py           # consumidor da fila de busca
 ├── Dockerfile                  # imagem compartilhada pelos serviços e worker
 ├── documentos/                 # base de teste para indexar
 ├── docker-compose.yml          # serviços, Redis e worker
@@ -84,10 +136,10 @@ sd-2026-2-kit-c2a2/
 
 ---
 
-## O que você precisa fazer
+## Estado das tarefas
 
-Abra o arquivo **`TAREFAS.md`**: ele lista o núcleo obrigatório item a item, indicando
-o arquivo e a aula de referência de cada um.
+O progresso das tarefas obrigatorias e os itens opcionais estao listados em
+**`TAREFAS.md`**.
 
 ---
 
