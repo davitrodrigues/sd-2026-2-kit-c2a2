@@ -3,8 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import HTTPException
-
 from servicos.comum import fila, llm
 from servicos.comum.circuit_breaker import CircuitBreaker
 from servicos.geracao import app as geracao
@@ -13,45 +11,12 @@ from servicos.ingestao import armazenamento
 from servicos.recuperacao import app as recuperacao
 from servicos.worker import app as worker
 
-
-class RespostaHTTP:
-    def __init__(self, corpo):
-        self.corpo = corpo
-        self.status_code = 200
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self.corpo
-
-
-class RedisEmMemoria:
-    def __init__(self):
-        self.filas = {}
-
-    def rpush(self, nome, mensagem):
-        if nome == fila.NOME_FILA_BUSCA:
-            worker.processar_mensagem(self, mensagem)
-        else:
-            self.filas.setdefault(nome, []).append(mensagem)
-
-    def lpush(self, nome, mensagem):
-        self.filas.setdefault(nome, []).insert(0, mensagem)
-
-    def blpop(self, nome, timeout):
-        mensagens = self.filas.get(nome, [])
-        return (nome, mensagens.pop()) if mensagens else None
-
-    def expire(self, nome, segundos):
-        return True
-
-    def close(self):
-        pass
+from tests.support import RedisEmMemoria, RespostaHTTP
 
 
 class PipelineRagTests(unittest.TestCase):
     def test_persistencia_fila_worker_recuperacao_e_pergunta(self):
+        """Fluxo completo: pergunta recebe resposta baseada nos documentos."""
         documentos = [
             ingestao.Documento(
                 texto="O teorema CAP exige escolher consistencia ou "
@@ -130,65 +95,9 @@ class PipelineRagTests(unittest.TestCase):
                     )
                 )
 
-        self.assertIn("teorema_cap.txt", [f["origem"] for f in pergunta["fontes"]])
+        origens = [fonte["origem"] for fonte in pergunta["fontes"]]
+        self.assertIn("teorema_cap.txt", origens)
         self.assertIn("particao de rede", pergunta["contexto"][0])
         self.assertIn("MODO SIMULADO", pergunta["resposta"])
         self.assertFalse(pergunta["degradado"])
         self.assertEqual(pergunta["avaliacao"]["nota"], "boa")
-
-    def test_disjuntor_aberto_retorna_503(self):
-        disjuntor = CircuitBreaker(limite_falhas=3, espera_segundos=60)
-
-        def falhar():
-            raise RuntimeError("falha simulada")
-
-        for _ in range(3):
-            with self.assertRaises(RuntimeError):
-                disjuntor.chamar(falhar)
-
-        with (
-            patch.object(geracao, "disjuntor", disjuntor),
-            patch.object(
-                geracao,
-                "disjuntor_busca",
-                CircuitBreaker(),
-            ),
-            patch.object(
-                geracao,
-                "solicitar_busca",
-                return_value=[{
-                    "texto": "O teorema CAP trata de consistencia.",
-                    "origem": "teorema_cap.txt",
-                    "score": 0.8,
-                }],
-            ),
-        ):
-            with self.assertRaises(HTTPException) as erro:
-                geracao.perguntar(geracao.Pergunta(pergunta="O que e CAP?"))
-
-        self.assertEqual(erro.exception.status_code, 503)
-        self.assertIn("Retry-After", erro.exception.headers)
-
-    def test_llm_envia_chave_configurada(self):
-        with (
-            patch.object(llm, "API_KEY", "chave-de-teste"),
-            patch.object(llm, "FORCAR_FALHA", False),
-            patch.object(
-                llm.requests,
-                "post",
-                return_value=RespostaHTTP({
-                    "choices": [{"message": {"content": "resposta"}}]
-                }),
-            ) as requisicao,
-        ):
-            resultado = llm._chamar_api("prompt")
-
-        self.assertEqual(resultado, "resposta")
-        self.assertEqual(
-            requisicao.call_args.kwargs["headers"]["Authorization"],
-            "Bearer chave-de-teste",
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()

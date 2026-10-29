@@ -82,12 +82,13 @@ docker compose down
 Com o ambiente virtual ativado, execute na raiz do projeto:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m tests
 ```
 
-Os testes cobrem persistencia do indice, busca pela fila e worker, fluxo
-`/perguntar` offline, circuito aberto e autenticacao do LLM por variavel de
-ambiente.
+O runner apresenta nomes descritivos em portugues, status e duracao de cada
+teste. Em terminais compativeis, os resultados recebem cores automaticamente.
+Para controlar as cores, use `python -m tests --color always` ou
+`python -m tests --color never`.
 
 Sem `LLM_API_KEY`, a geracao usa o modo simulado offline. Com uma chave configurada
 no ambiente, chama o LLM externo usando somente os trechos recuperados como contexto.
