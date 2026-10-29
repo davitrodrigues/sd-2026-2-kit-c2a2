@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from servicos.comum.embeddings import Vetorizador, similaridade
+from servicos.comum.texto import palavras
 
 log = logging.getLogger("uvicorn.error")
 
@@ -17,6 +18,10 @@ app = FastAPI(title="Recuperacao - C2.A2")
 URL_INGESTAO = os.getenv("URL_INGESTAO", "http://localhost:8001")
 # erros que contam como ingestao fora do ar ou resposta estranha
 FALHAS = (requests.RequestException, ValueError)
+# com zero a busca volta a usar so o cosseno, sem reordenar
+RERANK = os.getenv("RERANK", "1").strip() != "0"
+# peso de cada parte na nota final do reordenamento
+PESO_VETOR, PESO_COBERTURA = 0.7, 0.3
 
 # copia do indice da ingestao; quando a versao muda, e trocada por uma nova.
 CACHE = None
@@ -104,6 +109,26 @@ def obter_indice():
         return cache
 
 
+# reordena os melhores pelo cosseno somado as palavras da pergunta no trecho.
+def reordenar(pergunta, achados, top_k):
+    chave = palavras(pergunta)
+    candidatos = []
+    for cosseno, item in achados[:max(top_k * 3, 10)]:
+        # parte das palavras importantes da pergunta que aparece no trecho
+        cobertura = (len(chave & palavras(item["texto"])) / len(chave)
+                     if chave else 0.0)
+        nota = PESO_VETOR * cosseno + PESO_COBERTURA * cobertura
+        candidatos.append((nota, cosseno, cobertura, item))
+    # se algum trecho tem palavra da pergunta, os que nao tem sao ruido
+    if any(c[2] > 0 for c in candidatos):
+        candidatos = [c for c in candidatos if c[2] > 0]
+    candidatos.sort(key=lambda c: c[0], reverse=True)
+    return [{"texto": i["texto"], "origem": i["origem"],
+             "score": round(n, 4), "score_vetor": round(v, 4),
+             "cobertura": round(c, 4)}
+            for n, v, c, i in candidatos[:top_k]]
+
+
 # devolve os trechos mais parecidos com a pergunta, do maior para o menor.
 @app.post("/buscar")
 def buscar(consulta: Consulta):
@@ -118,6 +143,9 @@ def buscar(consulta: Consulta):
         if score > 0:  # zero quer dizer nenhuma palavra em comum
             achados.append((score, item))
     achados.sort(key=lambda a: a[0], reverse=True)
+    if RERANK:
+        return {"resultados": reordenar(consulta.pergunta, achados,
+                                        consulta.top_k)}
     return {"resultados": [
         {"texto": i["texto"], "origem": i["origem"], "score": round(s, 4)}
         for s, i in achados[:consulta.top_k]]}

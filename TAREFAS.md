@@ -22,13 +22,13 @@
 
 ## Extensoes opcionais
 
-- [ ] Reordenar os trechos por relevancia (reranking)
-- [ ] Citar quais documentos embasaram a resposta
-- [ ] Avaliacao automatica simples da qualidade da resposta
+- [X] Reordenar os trechos por relevancia (reranking)
+- [X] Citar quais documentos embasaram a resposta
+- [X] Avaliacao automatica simples da qualidade da resposta
 - [ ] Trocar TF-IDF por embeddings de verdade (sentence-transformers)
 
 ## Antes de entregar
 
-- [ ] Desligue a internet: o modo simulado do LLM mantem o sistema de pe?
-- [ ] Derrube o servico de recuperacao: o disjuntor abre como esperado?
-- [ ] A chave da API esta FORA do codigo (em variavel de ambiente)?
+- [X] Desligue a internet: o modo simulado do LLM mantem o sistema de pe?
+- [X] Derrube o servico de recuperacao: o disjuntor abre como esperado?
+- [X] A chave da API esta FORA do codigo (em variavel de ambiente)?
