@@ -95,8 +95,11 @@ def perguntar(p: Pergunta):
 
     try:
         resposta = disjuntor.chamar(gerar, p.pergunta, trechos)
-    except CircuitoAberto:
-        motivo = "circuito aberto"
+    except CircuitoAberto as e:
+        espera = max(1, math.ceil(e.restante))
+        raise HTTPException(
+            503, f"servico de LLM indisponivel; nova tentativa em {espera} s",
+            headers={"Retry-After": str(espera)}) from e
     except Exception as e:
         log.warning("llm falhou (%s: %s); respondendo so com os trechos",
                     type(e).__name__, e)

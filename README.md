@@ -77,6 +77,18 @@ curl -X POST http://localhost:8003/perguntar -H "Content-Type: application/json"
 docker compose down
 ```
 
+## Testes automatizados
+
+Com o ambiente virtual ativado, execute na raiz do projeto:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Os testes cobrem persistencia do indice, busca pela fila e worker, fluxo
+`/perguntar` offline, circuito aberto e autenticacao do LLM por variavel de
+ambiente.
+
 Sem `LLM_API_KEY`, a geracao usa o modo simulado offline. Com uma chave configurada
 no ambiente, chama o LLM externo usando somente os trechos recuperados como contexto.
 

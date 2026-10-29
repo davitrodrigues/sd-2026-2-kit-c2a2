@@ -15,7 +15,7 @@
 - [X] **4. Mensageria** - novo worker + `docker-compose.yml`
       Ao menos UMA etapa do fluxo deve passar por fila, e nao por chamada direta. (Aula 8)
 
-- [ ] **5. Fluxo completo** - de ponta a ponta
+- [X] **5. Fluxo completo** - de ponta a ponta
       Pergunta entra em /perguntar e sai uma resposta fundamentada nos documentos.
 
 - [X] **6. README com diagrama** da arquitetura dos tres servicos.
